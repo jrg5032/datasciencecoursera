@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frankl's Wisdom</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .mood-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .mood-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        #quote-display {
+            min-height: 120px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen">
+    <div class="bg-white p-8 rounded-xl shadow-lg max-w-2xl w-full text-center">
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold text-gray-900">A Moment with Frankl</h1>
+            <p class="text-gray-600 mt-2">How are you feeling? Select a mood to receive a guiding thought from the perspective of Viktor Frankl.</p>
+        </header>
+
+        <main>
+            <div id="mood-selector" class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8">
+                <button data-mood="Despairing" class="mood-btn bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md">Despairing</button>
+                <button data-mood="Anxious" class="mood-btn bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md">Anxious</button>
+                <button data-mood="Searching" class="mood-btn bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md">Searching</button>
+                <button data-mood="Hopeful" class="mood-btn bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md">Hopeful</button>
+                <button data-mood="Resilient" class="mood-btn bg-purple-500 hover:bg-purple-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md">Resilient</button>
+            </div>
+
+            <div id="quote-container" class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+                <div id="quote-display" class="flex items-center justify-center">
+                    <p class="text-gray-500 italic">Your quote will appear here...</p>
+                </div>
+                 <div id="loader" class="hidden my-4">
+                    <div class="flex justify-center items-center space-x-2">
+                        <div class="w-3 h-3 bg-gray-500 rounded-full animate-pulse"></div>
+                        <div class="w-3 h-3 bg-gray-500 rounded-full animate-pulse" style="animation-delay: 0.2s;"></div>
+                        <div class="w-3 h-3 bg-gray-500 rounded-full animate-pulse" style="animation-delay: 0.4s;"></div>
+                    </div>
+                </div>
+                <button id="listen-btn" class="mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-full shadow-lg transition duration-300 ease-in-out disabled:bg-indigo-300 disabled:cursor-not-allowed" disabled>
+                    <svg class="w-6 h-6 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.858 5.858a9 9 0 0112.728 0m-12.728 0a9 9 0 010 12.728m0-12.728L12 12m0 0l5.657 5.657M12 12l-5.657 5.657"></path></svg>
+                    Listen
+                </button>
+                 <div id="audio-player"></div>
+            </div>
+             <p id="error-message" class="text-red-500 mt-4 h-6"></p>
+        </main>
+    </div>
+
+    <script>
+        const moodButtons = document.querySelectorAll('.mood-btn');
+        const quoteDisplay = document.getElementById('quote-display');
+        const listenButton = document.getElementById('listen-btn');
+        const loader = document.getElementById('loader');
+        const audioPlayerContainer = document.getElementById('audio-player');
+        const errorMessage = document.getElementById('error-message');
+        
+        let currentQuote = '';
+        const apiKey = ""; // API key will be injected by the environment
+
+        moodButtons.forEach(button => {
+            button.addEventListener('click', async () => {
+                const mood = button.dataset.mood;
+                await getQuote(mood);
+            });
+        });
+
+        listenButton.addEventListener('click', () => {
+            if (currentQuote) {
+                speakQuote(currentQuote);
+            }
+        });
+
+        async function getQuote(mood) {
+            quoteDisplay.innerHTML = '';
+            loader.classList.remove('hidden');
+            listenButton.disabled = true;
+            errorMessage.textContent = '';
+            currentQuote = '';
+
+            const systemPrompt = "You are Viktor Frankl. Respond with a short, powerful, and original inspirational quote (around 2-3 sentences) that you would say to someone feeling the specified mood. Do not greet the user or add any conversational fluff. Just provide the quote itself.";
+            const userQuery = `My mood is: ${mood}`;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+            try {
+                const payload = {
+                    contents: [{ parts: [{ text: userQuery }] }],
+                    systemInstruction: {
+                        parts: [{ text: systemPrompt }]
+                    },
+                };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    currentQuote = candidate.content.parts[0].text.trim().replace(/^"|"$/g, '');
+                    quoteDisplay.innerHTML = `<p class="text-xl text-gray-800">${currentQuote}</p>`;
+                    listenButton.disabled = false;
+                } else {
+                    throw new Error('Invalid response format from the API.');
+                }
+            } catch (error) {
+                console.error('Error fetching quote:', error);
+                errorMessage.textContent = 'Failed to generate quote. Please try again.';
+                quoteDisplay.innerHTML = `<p class="text-gray-500 italic">Could not fetch a quote. Check your connection or try again later.</p>`;
+            } finally {
+                loader.classList.add('hidden');
+            }
+        }
+
+        async function speakQuote(textToSpeak) {
+            listenButton.disabled = true;
+            listenButton.innerHTML = `
+                <svg class="w-6 h-6 inline-block mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Generating...`;
+            errorMessage.textContent = '';
+
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: `Say in a calm, thoughtful, and slightly gravelly older male voice: ${textToSpeak}` }] }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: { prebuiltVoiceConfig: { voiceName: "Algenib" } }
+                    }
+                },
+                model: "gemini-2.5-flash-preview-tts"
+            };
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) throw new Error(`TTS API Error: ${response.statusText}`);
+                
+                const result = await response.json();
+                const part = result?.candidates?.[0]?.content?.parts?.[0];
+                const audioData = part?.inlineData?.data;
+                const mimeType = part?.inlineData?.mimeType;
+
+                if (audioData && mimeType && mimeType.startsWith("audio/")) {
+                    const sampleRate = parseInt(mimeType.match(/rate=(\d+)/)[1], 10);
+                    const pcmData = base64ToArrayBuffer(audioData);
+                    const pcm16 = new Int16Array(pcmData);
+                    const wavBlob = pcmToWav(pcm16, 1, sampleRate);
+                    const audioUrl = URL.createObjectURL(wavBlob);
+                    
+                    audioPlayerContainer.innerHTML = ''; // Clear previous player
+                    const audio = new Audio(audioUrl);
+                    audio.play();
+                    audio.onended = () => {
+                       resetListenButton();
+                    };
+                } else {
+                    throw new Error("Audio data not found in response.");
+                }
+
+            } catch (error) {
+                console.error("Error generating audio:", error);
+                errorMessage.textContent = "Could not play the audio.";
+                resetListenButton();
+            }
+        }
+
+        function resetListenButton() {
+            listenButton.disabled = !currentQuote;
+            listenButton.innerHTML = `
+                <svg class="w-6 h-6 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.858 5.858a9 9 0 0112.728 0m-12.728 0a9 9 0 010 12.728m0-12.728L12 12m0 0l5.657 5.657M12 12l-5.657 5.657"></path></svg>
+                Listen`;
+        }
+        
+        // --- Audio Helper Functions ---
+        function base64ToArrayBuffer(base64) {
+            const binaryString = window.atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function pcmToWav(pcmData, numChannels, sampleRate) {
+            const SIZEOF_INT16 = 2;
+            const numSamples = pcmData.length;
+            const buffer = new ArrayBuffer(44 + numSamples * SIZEOF_INT16);
+            const view = new DataView(buffer);
+
+            // RIFF header
+            view.setUint32(0, 0x52494646, false); // "RIFF"
+            view.setUint32(4, 36 + numSamples * SIZEOF_INT16, true);
+            view.setUint32(8, 0x57415645, false); // "WAVE"
+            // "fmt " subchunk
+            view.setUint32(12, 0x666d7420, false); // "fmt "
+            view.setUint32(16, 16, true); // Subchunk1Size
+            view.setUint16(20, 1, true); // AudioFormat (PCM)
+            view.setUint16(22, numChannels, true); // NumChannels
+            view.setUint32(24, sampleRate, true); // SampleRate
+            view.setUint32(28, sampleRate * numChannels * SIZEOF_INT16, true); // ByteRate
+            view.setUint16(32, numChannels * SIZEOF_INT16, true); // BlockAlign
+            view.setUint16(34, 16, true); // BitsPerSample
+            // "data" subchunk
+            view.setUint32(36, 0x64617461, false); // "data"
+            view.setUint32(40, numSamples * SIZEOF_INT16, true); // Subchunk2Size
+
+            // Write PCM data
+            for (let i = 0; i < numSamples; i++) {
+                view.setInt16(44 + i * SIZEOF_INT16, pcmData[i], true);
+            }
+            
+            return new Blob([view], { type: 'audio/wav' });
+        }
+    </script>
+</body>
+</html>
